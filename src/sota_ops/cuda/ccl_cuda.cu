@@ -8,12 +8,12 @@
 namespace sota_ops::ccl {
 
 namespace {
-    template <typename dst_t, typename src_t>
-    __forceinline__  __device__
-    dst_t type_reinterpret(src_t value)
-    {
-        return *(reinterpret_cast<dst_t*>(&value));
-    }
+  template <typename dst_t, typename src_t>
+  __forceinline__ __host__ __device__
+  dst_t type_reinterpret(src_t value)
+  {
+      return *(reinterpret_cast<dst_t*>(&value));
+  }
 
   template <typename index_t>
   __device__ index_t representative(const index_t idx, index_t* const __restrict__ labels_ptr) {
@@ -84,7 +84,7 @@ namespace {
       index_t* __restrict__ indices_ptr,
       index_t* __restrict__ edges_ptr,
       index_t* __restrict__ labels_ptr) {
-    // process low-degree nodes at thread granularity and fill working list
+    // process low-degree nodes at thread granularity and fill work queue
     thrust::for_each(
         policy,
         thrust::make_counting_iterator<index_t>(0),
@@ -177,8 +177,8 @@ void connected_components_labeling_cuda_impl(
   auto indices_ptr = indices.data_ptr<index_t>();
   auto edges_ptr = edges.data_ptr<index_t>();
 
-  auto working_list = at::empty_like(labels);
-  auto working_list_ptr = working_list.data_ptr<index_t>();
+  auto work_queue = at::empty_like(labels);
+  auto work_queue_ptr = work_queue.data_ptr<index_t>();
 
   // __device__ index_t top_l, pos_l, top_h, pos_h;
   initialize<index_t>(policy, num_nodes, indices_ptr, edges_ptr, labels_ptr);
@@ -192,6 +192,9 @@ at::Tensor connected_components_labeling_cuda(at::Tensor indices, at::Tensor edg
 
   TORCH_CHECK(indices.dim() == 1, "indices must be a 1D tensor");
   TORCH_CHECK(edges.dim() == 1, "edges must be a 1D tensor");
+
+  TORCH_CHECK(indices.is_contiguous(), "indices must be contiguous");
+  TORCH_CHECK(edges.is_contiguous(), "edges must be contiguous");
 
   auto labels = at::empty({indices.size(0) - 1}, indices.options());
 

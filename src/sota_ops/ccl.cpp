@@ -12,7 +12,7 @@ at::Tensor connected_components_labeling(at::Tensor indices, at::Tensor edges) {
 
 TORCH_LIBRARY_FRAGMENT(sota_ops, m) {
   m.def(TORCH_SELECTIVE_SCHEMA(
-    "sota_ops::connected_components_labeling(Tensor indices, Tensor edges) -> Tensor"));
+      "sota_ops::connected_components_labeling(Tensor indices, Tensor edges) -> Tensor"));
 }
 
 } // namespace sota_ops::ccl
