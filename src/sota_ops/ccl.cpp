@@ -3,7 +3,7 @@
 
 namespace sota_ops::ccl {
 
-std::tuple<at::Tensor, at::Tensor> connected_components_labeling(at::Tensor indices, at::Tensor edges) {
+at::Tensor connected_components_labeling(at::Tensor indices, at::Tensor edges) {
   static auto op = c10::Dispatcher::singleton()
                        .findSchemaOrThrow("sota_ops::connected_components_labeling", "")
                        .typed<decltype(connected_components_labeling)>();
@@ -12,7 +12,7 @@ std::tuple<at::Tensor, at::Tensor> connected_components_labeling(at::Tensor indi
 
 TORCH_LIBRARY_FRAGMENT(sota_ops, m) {
   m.def(TORCH_SELECTIVE_SCHEMA(
-    "sota_ops::connected_components_labeling(Tensor indices, Tensor edges) -> (Tensor, Tensor)"));
+    "sota_ops::connected_components_labeling(Tensor indices, Tensor edges) -> Tensor"));
 }
 
 } // namespace sota_ops::ccl

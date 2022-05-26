@@ -25,5 +25,6 @@ def _get_extension_path(lib_name):
 
 try:
     torch.ops.load_library(_get_extension_path("libsota_ops"))
-except (ImportError, OSError):
+except (ImportError, OSError) as e:
+    print(e)
     pass
