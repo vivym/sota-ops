@@ -7,15 +7,17 @@
 
 namespace sota_ops::ball_query {
 
-template <typename scalar_t, typename index_t, typename policy_t>
+template <typename scalar_t, typename index_t, bool use_label, typename policy_t>
 void ball_query_cuda_impl_thrust(
     const policy_t& policy,
     index_t* __restrict__ indices_ptr,
     index_t* __restrict__ num_points_per_query_ptr,
-    scalar_t* __restrict__ points_ptr,
-    scalar_t* __restrict__ query_ptr,
-    index_t* __restrict__ batch_indices_ptr,
-    index_t* __restrict__ batch_offsets_ptr,
+    const scalar_t* const __restrict__ points_ptr,
+    const scalar_t* const __restrict__ query_ptr,
+    const index_t* const __restrict__ batch_indices_ptr,
+    const index_t* const __restrict__ batch_offsets_ptr,
+    const index_t* const __restrict__ point_labels_ptr,
+    const index_t* const __restrict__ query_labels_ptr,
     scalar_t radius2,
     index_t num_samples,
     index_t num_queries) {
@@ -24,21 +26,27 @@ void ball_query_cuda_impl_thrust(
       thrust::counting_iterator<index_t>(0),
       thrust::counting_iterator<index_t>(num_queries),
       [=] __host__ __device__ (index_t i) {
-        auto batch_idx = batch_indices_ptr[i];
-        auto from = batch_offsets_ptr[batch_idx];
-        auto to = batch_offsets_ptr[batch_idx + 1];
+        const auto batch_idx = batch_indices_ptr[i];
+        const auto begin = batch_offsets_ptr[batch_idx];
+        const auto end = batch_offsets_ptr[batch_idx + 1];
 
-        auto q_x = query_ptr[i * 3 + 0];
-        auto q_y = query_ptr[i * 3 + 1];
-        auto q_z = query_ptr[i * 3 + 2];
+        const auto q_label = use_label ? query_labels_ptr[i] : -1;
+        const auto q_x = query_ptr[i * 3 + 0];
+        const auto q_y = query_ptr[i * 3 + 1];
+        const auto q_z = query_ptr[i * 3 + 2];
 
         index_t cnt = 0;
-        for (auto k = from; k < to && cnt < num_samples; k++) {
-          auto x = points_ptr[k * 3 + 0];
-          auto y = points_ptr[k * 3 + 1];
-          auto z = points_ptr[k * 3 + 2];
-          auto d2 = (q_x - x) * (q_x - x) + (q_y - y) * (q_y - y) +
-                    (q_z - z) * (q_z - z);
+        for (auto k = begin; k < end && cnt < num_samples; k++) {
+          const auto label = use_label ? point_labels_ptr[k] : -1;
+          if (label != q_label) {
+            continue;
+          }
+
+          const auto x = points_ptr[k * 3 + 0];
+          const auto y = points_ptr[k * 3 + 1];
+          const auto z = points_ptr[k * 3 + 2];
+          const auto d2 = (q_x - x) * (q_x - x) + (q_y - y) * (q_y - y) +
+                          (q_z - z) * (q_z - z);
           if (d2 < radius2) {
             indices_ptr[i * num_samples + cnt] = k;
             cnt++;
@@ -52,12 +60,14 @@ template <typename scalar_t, typename index_t>
 void ball_query_cuda_impl(
     at::Tensor& indices,
     at::Tensor& num_points_per_query,
-    at::Tensor points,
-    at::Tensor query,
-    at::Tensor batch_indices,
-    at::Tensor batch_offsets,
+    const at::Tensor& points,
+    const at::Tensor& query,
+    const at::Tensor& batch_indices,
+    const at::Tensor& batch_offsets,
     double radius,
-    int64_t num_samples) {
+    int64_t num_samples,
+    const c10::optional<at::Tensor>& point_labels,
+    const c10::optional<at::Tensor>& query_labels) {
   auto stream = at::cuda::getCurrentCUDAStream().stream();
   auto policy = thrust::cuda::par(utils::ThrustAllocator()).on(stream);
 
@@ -70,26 +80,56 @@ void ball_query_cuda_impl(
   auto batch_indices_ptr = batch_indices.data_ptr<index_t>();
   auto batch_offsets_ptr = batch_offsets.data_ptr<index_t>();
 
-  ball_query_cuda_impl_thrust<scalar_t, index_t>(
-      policy,
-      indices_ptr,
-      num_points_per_query_ptr,
-      points_ptr,
-      query_ptr,
-      batch_indices_ptr,
-      batch_offsets_ptr,
-      static_cast<scalar_t>(radius * radius),
-      static_cast<index_t>(num_samples),
-      static_cast<index_t>(num_queries));
+  index_t* point_labels_ptr = nullptr;
+  if (point_labels.has_value()) {
+    point_labels_ptr = point_labels.value().data_ptr<index_t>();
+  }
+  index_t* query_labels_ptr = nullptr;
+  if (query_labels.has_value()) {
+    query_labels_ptr = query_labels.value().data_ptr<index_t>();
+  }
+
+  if (point_labels.has_value()) {
+    ball_query_cuda_impl_thrust<scalar_t, index_t, true>(
+        policy,
+        indices_ptr,
+        num_points_per_query_ptr,
+        points_ptr,
+        query_ptr,
+        batch_indices_ptr,
+        batch_offsets_ptr,
+        point_labels_ptr,
+        query_labels_ptr,
+        static_cast<scalar_t>(radius * radius),
+        static_cast<index_t>(num_samples),
+        static_cast<index_t>(num_queries));
+  } else {
+    ball_query_cuda_impl_thrust<scalar_t, index_t, false>(
+        policy,
+        indices_ptr,
+        num_points_per_query_ptr,
+        points_ptr,
+        query_ptr,
+        batch_indices_ptr,
+        batch_offsets_ptr,
+        point_labels_ptr,
+        query_labels_ptr,
+        static_cast<scalar_t>(radius * radius),
+        static_cast<index_t>(num_samples),
+        static_cast<index_t>(num_queries));
+  }
+
 }
 
 std::tuple<at::Tensor, at::Tensor> ball_query_cuda(
-    at::Tensor points,
-    at::Tensor query,
-    at::Tensor batch_indices,
-    at::Tensor batch_offsets,
+    const at::Tensor& points,
+    const at::Tensor& query,
+    const at::Tensor& batch_indices,
+    const at::Tensor& batch_offsets,
     double radius,
-    int64_t num_samples) {
+    int64_t num_samples,
+    const c10::optional<at::Tensor>& point_labels,
+    const c10::optional<at::Tensor>& query_labels) {
   TORCH_CHECK(points.is_cuda(), "points must be a CUDA tensor");
   TORCH_CHECK(query.is_cuda(), "query must be a CUDA tensor");
   TORCH_CHECK(batch_indices.is_cuda(), "batch_indices must be a CUDA tensor");
@@ -105,6 +145,18 @@ std::tuple<at::Tensor, at::Tensor> ball_query_cuda(
   TORCH_CHECK(batch_indices.is_contiguous(), "batch_indices must be contiguous");
   TORCH_CHECK(batch_offsets.is_contiguous(), "batch_offsets must be contiguous");
 
+  if (point_labels.has_value()) {
+    TORCH_CHECK(point_labels.value().is_cuda(), "point_labels must be a CUDA tensor");
+    TORCH_CHECK(point_labels.value().dim() == 1, "point_labels must be a 1D tensor");
+    TORCH_CHECK(point_labels.value().is_contiguous(), "point_labels must be contiguous");
+  }
+
+  if (query_labels.has_value()) {
+    TORCH_CHECK(query_labels.value().is_cuda(), "query_labels must be a CUDA tensor");
+    TORCH_CHECK(query_labels.value().dim() == 1, "query_labels must be a 1D tensor");
+    TORCH_CHECK(query_labels.value().is_contiguous(), "query_labels must be contiguous");
+  }
+
   auto indices = at::empty({query.size(0), num_samples}, batch_indices.options());
   auto num_points_per_query = at::empty({query.size(0)}, batch_indices.options());
 
@@ -118,7 +170,9 @@ std::tuple<at::Tensor, at::Tensor> ball_query_cuda(
           batch_indices,
           batch_offsets,
           radius,
-          num_samples);
+          num_samples,
+          point_labels,
+          query_labels);
     } else if (batch_indices.scalar_type() == at::kLong) {
       ball_query_cuda_impl<scalar_t, int64_t>(
           indices,
@@ -128,7 +182,9 @@ std::tuple<at::Tensor, at::Tensor> ball_query_cuda(
           batch_indices,
           batch_offsets,
           radius,
-          num_samples);
+          num_samples,
+          point_labels,
+          query_labels);
     } else {
       AT_ERROR("Unsupported type");
     }
