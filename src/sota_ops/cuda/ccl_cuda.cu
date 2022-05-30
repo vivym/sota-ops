@@ -235,7 +235,7 @@ at::Tensor connected_components_labeling_cuda(
       connected_components_labeling_cuda_impl<int64_t, false>(labels, indices, edges);
     }
   } else {
-    AT_ERROR("Unsupported type");
+    AT_ERROR("Unsupported type (connected_components_labeling_cuda)");
   }
 
   return labels;

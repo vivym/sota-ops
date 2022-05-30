@@ -186,7 +186,7 @@ std::tuple<at::Tensor, at::Tensor> ball_query_cuda(
           point_labels,
           query_labels);
     } else {
-      AT_ERROR("Unsupported type");
+      AT_ERROR("Unsupported type (ball_query_cuda)");
     }
   });
 
