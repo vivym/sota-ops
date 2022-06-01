@@ -14,9 +14,9 @@ def segmented_reduce(
 
     if mode == "sum":
         mode = 0
-    elif mode == "max":
-        mode = 1
     elif mode == "min":
+        mode = 1
+    elif mode == "max":
         mode = 2
     else:
         raise ValueError(f"Unknown mode: {mode}")

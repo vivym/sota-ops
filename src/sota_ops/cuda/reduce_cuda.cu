@@ -7,17 +7,6 @@
 
 namespace sota_ops::reduce {
 
-// template <typename scalar_t, typename index_t, typename policy_t>
-// inline void reduce_by_key_cuda_impl_thrust(
-//     const policy_t& policy,
-//     index_t* __restrict__ output_ptr,
-//     const scalar_t* const __restrict__ values_ptr,
-//     int64_t num_values,
-//     const index_t* const __restrict__ keys_ptr,
-//     ) {
-
-// }
-
 template <typename scalar_t, int N>
 struct array_t {
   scalar_t data[N];
@@ -34,8 +23,9 @@ template <typename scalar_t, int N>
 struct array_sum_op {
   using value_type = array_t<scalar_t, N>;
 
+  __forceinline__
   __host__ __device__
-  inline value_type operator() (const value_type& a, const value_type& b) const {
+  value_type operator() (const value_type& a, const value_type& b) const {
     value_type res;
     #pragma unroll
     for (int i = 0; i < N; i++) {
@@ -49,8 +39,9 @@ template <typename scalar_t, int N>
 struct array_min_op {
   using value_type = array_t<scalar_t, N>;
 
+  __forceinline__
   __host__ __device__
-  inline value_type operator() (const value_type& a, const value_type& b) const {
+  value_type operator() (const value_type& a, const value_type& b) const {
     value_type res;
     #pragma unroll
     for (int i = 0; i < N; i++) {
@@ -64,8 +55,9 @@ template <typename scalar_t, int N>
 struct array_max_op {
   using value_type = array_t<scalar_t, N>;
 
+  __forceinline__
   __host__ __device__
-  inline value_type operator() (const value_type& a, const value_type& b) const {
+  value_type operator() (const value_type& a, const value_type& b) const {
     value_type res;
     #pragma unroll
     for (int i = 0; i < N; i++) {
@@ -172,7 +164,7 @@ at::Tensor segmented_reduce_cuda(
 
   auto num_segments = segment_offsets_begin.size(0);
   auto num_channels = values.size(1);
-  TORCH_CHECK(1 <= num_channels && num_channels <= 3, "num_channels must be in [1, 3]");
+  TORCH_CHECK(1 <= num_channels && num_channels <= 4, "num_channels must be in [1, 4]");
 
   auto output = at::empty({num_segments, num_channels}, values.options());
 
@@ -184,9 +176,14 @@ at::Tensor segmented_reduce_cuda(
       } else if (num_channels == 2) {
         segmented_reduce_cuda_impl<scalar_t, int32_t, 2>(
             output, values, segment_offsets_begin, segment_offsets_end, mode);
-      } else {
+      } else if (num_channels == 3) {
         segmented_reduce_cuda_impl<scalar_t, int32_t, 3>(
             output, values, segment_offsets_begin, segment_offsets_end, mode);
+      } else if (num_channels == 4) {
+        segmented_reduce_cuda_impl<scalar_t, int32_t, 4>(
+            output, values, segment_offsets_begin, segment_offsets_end, mode);
+      } else {
+        AT_ERROR("Unsupported number of channels");
       }
     } else if (segment_offsets_begin.scalar_type() == at::kLong) {
       if (num_channels == 1) {
@@ -195,9 +192,14 @@ at::Tensor segmented_reduce_cuda(
       } else if (num_channels == 2) {
         segmented_reduce_cuda_impl<scalar_t, int64_t, 2>(
             output, values, segment_offsets_begin, segment_offsets_end, mode);
-      } else {
+      } else if (num_channels == 3) {
         segmented_reduce_cuda_impl<scalar_t, int64_t, 3>(
             output, values, segment_offsets_begin, segment_offsets_end, mode);
+      } else if (num_channels == 4) {
+        segmented_reduce_cuda_impl<scalar_t, int64_t, 4>(
+            output, values, segment_offsets_begin, segment_offsets_end, mode);
+      } else {
+        AT_ERROR("Unsupported number of channels");
       }
     } else {
       AT_ERROR("Unsupported type (segmented_reduce_cuda)");
