@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 
 
@@ -26,6 +28,20 @@ def segmented_reduce(
     )
 
 
+def segmented_maxpool(
+    values: torch.Tensor,
+    segment_offsets_begin: torch.Tensor,
+    segment_offsets_end: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    values = values.contiguous()
+    segment_offsets_begin = segment_offsets_begin.contiguous()
+    segment_offsets_end = segment_offsets_end.contiguous()
+
+    return torch.ops.sota_ops.segmented_maxpool(
+        values, segment_offsets_begin, segment_offsets_end
+    )
+
+
 def test():
     import random
 
@@ -51,5 +67,42 @@ def test():
     print("done")
 
 
+def test_2():
+    a1 = torch.as_tensor([
+        #
+        [1, 2, 3],
+        [0, 7, 4],
+        [3, 5, 1],
+        #
+        [0, 0, 1],
+        [1, 0, 0],
+    ], dtype=torch.float32, device="cuda")
+    a1.requires_grad_(True)
+
+    a2 = torch.as_tensor([
+        #
+        [1, 2, 3],
+        [0, 7, 4],
+        [3, 5, 1],
+        #
+        [0, 0, 1],
+        [1, 0, 0],
+    ], dtype=torch.float32, device="cuda")
+    a2.requires_grad_(True)
+
+    c, _ = segmented_maxpool(
+        a1,
+        torch.as_tensor([0, 3], dtype=torch.int32).cuda(),
+        torch.as_tensor([3, 5], dtype=torch.int32).cuda(),
+    )
+
+    L1 = c.mean()
+
+    L1.backward()
+
+    print(a1.grad)
+
+
 if __name__ == "__main__":
-    test()
+    # test()
+    test_2()

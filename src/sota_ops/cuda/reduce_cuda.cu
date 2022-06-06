@@ -1,6 +1,8 @@
 #include <limits>
 #include <cub/cub.cuh>
 #include <c10/cuda/CUDACachingAllocator.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/for_each.h>
 
 #include "sota_ops/reduce.h"
 #include "sota_ops/utils/thrust_allocator.h"
@@ -209,9 +211,97 @@ at::Tensor segmented_reduce_cuda(
   return output;
 }
 
+template <typename scalar_t, typename index_t>
+void segmented_maxpool_cuda_impl(
+    at::Tensor& output,
+    at::Tensor& max_indices,
+    const at::Tensor& values,
+    const at::Tensor& segment_offsets_begin,
+    const at::Tensor& segment_offsets_end) {
+  auto stream = at::cuda::getCurrentCUDAStream().stream();
+  auto policy = thrust::cuda::par(utils::ThrustAllocator()).on(stream);
+
+  index_t num_segments = segment_offsets_begin.size(0);
+  index_t num_channels = values.size(1);
+
+  auto output_ptr = output.data_ptr<scalar_t>();
+  auto max_indices_ptr = max_indices.data_ptr<index_t>();
+  auto values_ptr = values.data_ptr<scalar_t>();
+  auto segment_offsets_begin_ptr = segment_offsets_begin.data_ptr<index_t>();
+  auto segment_offsets_end_ptr = segment_offsets_end.data_ptr<index_t>();
+
+  thrust::for_each(
+      policy,
+      thrust::counting_iterator<index_t>(0),
+      thrust::counting_iterator<index_t>(num_segments * num_channels),
+      [=] __host__ __device__ (index_t idx) {
+        index_t segment_idx = idx / num_channels;
+        index_t channel_idx = idx % num_channels;
+
+        auto begin = segment_offsets_begin_ptr[segment_idx];
+        auto end = segment_offsets_end_ptr[segment_idx];
+
+        index_t max_idx = -1;
+        scalar_t max_value = -std::numeric_limits<scalar_t>::max();
+
+        for (auto i = begin; i < end; i++) {
+          auto value = values_ptr[i * num_channels + channel_idx];
+          if (value > max_value) {
+            max_value = value;
+            max_idx = i;
+          }
+        }
+
+        output_ptr[idx] = max_value;
+        max_indices_ptr[idx] = max_idx;
+      });
+}
+
+std::tuple<at::Tensor, at::Tensor> segmented_maxpool_cuda(
+    const at::Tensor& values,
+    const at::Tensor& segment_offsets_begin,
+    const at::Tensor& segment_offsets_end) {
+  TORCH_CHECK(values.is_cuda(), "values must be a CUDA tensor");
+  TORCH_CHECK(segment_offsets_begin.is_cuda(), "segment_offsets_begin must be a CUDA tensor");
+  TORCH_CHECK(segment_offsets_end.is_cuda(), "segment_offsets_end must be a CUDA tensor");
+
+  TORCH_CHECK(values.dim() == 2, "values must be a 2D tensor");
+  TORCH_CHECK(segment_offsets_begin.dim() == 1, "segment_offsets_begin must be a 1D tensor");
+  TORCH_CHECK(segment_offsets_end.dim() == 1, "segment_offsets_end must be a 1D tensor");
+  TORCH_CHECK(segment_offsets_begin.size(0) == segment_offsets_end.size(0),
+              "segment_offsets_begin and segment_offsets_end must have the same size");
+
+  TORCH_CHECK(values.is_contiguous(), "values must be contiguous");
+  TORCH_CHECK(segment_offsets_begin.is_contiguous(), "segment_offsets_begin must be contiguous");
+  TORCH_CHECK(segment_offsets_end.is_contiguous(), "segment_offsets_end must be contiguous");
+
+  auto num_segments = segment_offsets_begin.size(0);
+  auto num_channels = values.size(1);
+
+  auto output = at::empty({num_segments, num_channels}, values.options());
+  auto max_indices = at::empty({num_segments, num_channels}, segment_offsets_begin.options());
+
+  AT_DISPATCH_FLOATING_TYPES(values.type(), "segmented_maxpool_cuda", [&] {
+    if (segment_offsets_begin.scalar_type() == at::kInt) {
+      segmented_maxpool_cuda_impl<scalar_t, int32_t>(
+          output, max_indices, values, segment_offsets_begin, segment_offsets_end);
+    } else if (segment_offsets_begin.scalar_type() == at::kLong) {
+      segmented_maxpool_cuda_impl<scalar_t, int64_t>(
+          output, max_indices, values, segment_offsets_begin, segment_offsets_end);
+    } else {
+      AT_ERROR("Unsupported type (segmented_maxpool_cuda)");
+    }
+  });
+
+  return {output, max_indices};
+}
+
 TORCH_LIBRARY_IMPL(sota_ops, CUDA, m) {
   m.impl(TORCH_SELECTIVE_NAME("sota_ops::segmented_reduce"),
          TORCH_FN(segmented_reduce_cuda));
+
+  m.impl(TORCH_SELECTIVE_NAME("sota_ops::segmented_maxpool"),
+         TORCH_FN(segmented_maxpool_cuda));
 }
 
 } // namespace sota_ops::reduce
