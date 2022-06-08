@@ -170,12 +170,6 @@ void connected_components_labeling_cuda_impl(
   auto indices_ptr = indices.data_ptr<index_t>();
   auto edges_ptr = edges.data_ptr<index_t>();
 
-  auto indices_cpu = indices.cpu();
-  auto indices_cpu_ptr = indices_cpu.data_ptr<index_t>();
-
-  auto edges_cpu = edges.cpu();
-  auto edges_cpu_ptr = edges_cpu.data_ptr<index_t>();
-
   auto queue = at::empty_like(labels);
   auto queue_params = at::tensor(
       std::vector<index_t>({0, num_nodes - 1})).to(queue.device());
