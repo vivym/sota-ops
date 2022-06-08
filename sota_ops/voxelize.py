@@ -13,24 +13,29 @@ from .expand import expand_csr
 def voxelize(
     points: torch.Tensor,
     pt_features: torch.Tensor,
-    batch_offsets_csr: torch.Tensor,
+    batch_offsets: torch.Tensor,
     voxel_size: List[float],
     points_range_min: List[float],
     points_range_max: List[float],
     reduction: str = "mean",
+    max_points_per_voxel: int = 9223372036854775807,
+    max_voxels: int = 9223372036854775807,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     num_points = points.shape[0]
     with torch.no_grad():
         (
             voxel_coords, voxel_point_indices,
             voxel_point_row_splits, voxel_batch_splits,
-        ) = ml3d.ops.voxelize(
+        ) = torch.ops.open3d.voxelize(
             points,
-            row_splits=batch_offsets_csr,
+            row_splits=batch_offsets,
             voxel_size=torch.as_tensor(voxel_size, dtype=torch.float32),
             points_range_min=torch.as_tensor(points_range_min, dtype=torch.float32),
             points_range_max=torch.as_tensor(points_range_max, dtype=torch.float32),
+            max_points_per_voxel=max_points_per_voxel,
+            max_voxels=max_voxels,
         )
+
         batch_indices, _ = expand_csr(voxel_batch_splits, voxel_coords.shape[0])
 
         voxel_indices, num_points_per_voxel = expand_csr(

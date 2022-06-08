@@ -15,16 +15,16 @@ def segmented_reduce(
     segment_offsets_end = segment_offsets_end.contiguous()
 
     if mode == "sum":
-        mode = 0
+        mode_id = 0
     elif mode == "min":
-        mode = 1
+        mode_id = 1
     elif mode == "max":
-        mode = 2
+        mode_id = 2
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
     return torch.ops.sota_ops.segmented_reduce(
-        values, segment_offsets_begin, segment_offsets_end, mode
+        values, segment_offsets_begin, segment_offsets_end, mode_id
     )
 
 
