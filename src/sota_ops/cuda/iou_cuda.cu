@@ -43,7 +43,7 @@ void instance_seg_iou_csr_cuda_impl(
           }
         }
         ious_ptr[idx] = static_cast<scalar_t>(intersection) / (
-            num_points_gt + num_points_proposal - intersection + 1e-5f);
+            num_points_gt + num_points_proposal - intersection + 1e-8f);
       });
 }
 
@@ -124,7 +124,7 @@ void instance_seg_iou_cuda_impl(
           }
         }
         ious_ptr[idx] = static_cast<scalar_t>(intersection) / (
-            num_points_gt + num_points_proposal - intersection + 1e-5f);
+            num_points_gt + num_points_proposal - intersection + 1e-8f);
       });
 }
 
@@ -174,7 +174,7 @@ at::Tensor instance_seg_iou_cuda(
 }
 
 template <typename scalar_t, typename index_t>
-at::Tensor batch_instance_seg_iou_cuda_impl(
+void batch_instance_seg_iou_cuda_impl(
     at::Tensor& ious,
     const at::Tensor& proposal_offsets,
     const at::Tensor& instance_labels,
@@ -202,11 +202,11 @@ at::Tensor batch_instance_seg_iou_cuda_impl(
         const auto begin = proposal_offsets_ptr[proposal_idx];
         const auto end = proposal_offsets_ptr[proposal_idx + 1];
         const auto num_points_proposal = end - begin;
-        const auto batch_idx = batch_indices_ptr[proposal_idx];
-        const auto num_points_gt = __ldg(&num_points_per_instance_ptr[
-            batch_idx * max_num_instances + instance_idx]);
+        const auto batch_idx = batch_indices_ptr[begin];
+        const auto num_points_gt = num_points_per_instance_ptr[
+            batch_idx * max_num_instances + instance_idx];
 
-        if (num_points_gt == 0) {
+        if (num_points_gt == 0 || num_points_proposal == 0) {
           ious_ptr[idx] = 0.;
           return;
         }
@@ -249,14 +249,14 @@ at::Tensor batch_instance_seg_iou_cuda(
       {num_proposals, max_num_instances}, proposal_offsets.options().dtype(at::kFloat));
 
   if (proposal_offsets.scalar_type() == at::kInt) {
-    instance_seg_iou_cuda_impl<float, int32_t>(
+    batch_instance_seg_iou_cuda_impl<float, int32_t>(
         ious,
         proposal_offsets,
         instance_labels,
         batch_indices,
         num_points_per_instance);
   } else if (proposal_offsets.scalar_type() == at::kLong) {
-    instance_seg_iou_cuda_impl<float, int64_t>(
+    batch_instance_seg_iou_cuda_impl<float, int64_t>(
         ious,
         proposal_offsets,
         instance_labels,
