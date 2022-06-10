@@ -77,6 +77,8 @@
         "thread": "cpp",
         "typeindex": "cpp",
         "bit": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp"
     }
 }

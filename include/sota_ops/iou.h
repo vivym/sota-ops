@@ -15,4 +15,10 @@ at::Tensor instance_seg_iou(
     const at::Tensor& instance_labels,
     const at::Tensor& num_points_per_instance);
 
+at::Tensor batch_instance_seg_iou(
+    const at::Tensor& proposal_offsets,
+    const at::Tensor& instance_labels,
+    const at::Tensor& batch_indices,
+    const at::Tensor& num_points_per_instance);
+
 } // namespace sota_ops::iou

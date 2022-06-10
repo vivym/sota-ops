@@ -29,5 +29,23 @@ def instance_seg_iou(
     num_points_per_instance = num_points_per_instance.contiguous()
 
     return torch.ops.sota_ops.instance_seg_iou(
-        proposal_indices_begin, proposal_indices_end, instance_labels, num_points_per_instance
+        proposal_indices_begin, proposal_indices_end,
+        instance_labels, num_points_per_instance,
+    )
+
+
+@torch.no_grad()
+def batch_instance_seg_iou(
+    proposal_offsets: torch.Tensor,
+    instance_labels: torch.Tensor,
+    batch_indices: torch.Tensor,
+    num_points_per_instance: torch.Tensor,
+) -> torch.Tensor:
+    proposal_offsets = proposal_offsets.contiguous()
+    instance_labels = instance_labels.contiguous()
+    batch_indices = batch_indices.contiguous()
+    num_points_per_instance = num_points_per_instance.contiguous()
+
+    return torch.ops.sota_ops.batch_instance_seg_iou(
+        proposal_offsets, instance_labels, batch_indices, num_points_per_instance
     )
