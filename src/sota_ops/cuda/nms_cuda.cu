@@ -22,7 +22,6 @@ void nms_cuda_kernel(
     int64_t* mask_ptr,
     int num_dets,
     const scalar_t* ious_ptr,
-    const scalar_t* scores_ptr,
     const int64_t* sorted_indices_ptr,
     float threshold) {
   const int row_start = blockIdx.y;
@@ -36,18 +35,21 @@ void nms_cuda_kernel(
   const int col_size = min(num_dets - col_start * kThreadsPerBlock, kThreadsPerBlock);
 
   if (threadIdx.x < row_size) {
-    const int cur_det_idx = sorted_indices_ptr[kThreadsPerBlock * row_start + threadIdx.x];
-    const auto ious_row_ptr = ious_ptr + cur_det_idx * num_dets;
+    const int row_idx = row_start * kThreadsPerBlock + threadIdx.x;
+    const int det1_idx = sorted_indices_ptr[row_idx];
+    const auto ious_row_ptr = ious_ptr + det1_idx * num_dets;
 
     uint64_t t = 0;
     for (int i = row_start == col_start ? threadIdx.x + 1 : 0; i < col_size; i++) {
-      const auto iou = ious_row_ptr[i];
+      const int col_idx = col_start * kThreadsPerBlock + i;
+      const int det2_idx = sorted_indices_ptr[col_idx];
+      const auto iou = ious_row_ptr[det2_idx];
       if (iou > threshold) {
         t |= 1ULL << i;
       }
     }
     const int col_blocks = ceil_div(num_dets, kThreadsPerBlock);
-    mask_ptr[cur_det_idx * col_blocks + col_start] = t;
+    mask_ptr[row_idx * col_blocks + col_start] = t;
   }
 }
 
@@ -62,9 +64,13 @@ at::Tensor nms_cuda(const at::Tensor& ious, const at::Tensor& scores, double thr
 
   at::cuda::CUDAGuard device_guard(ious.device());
 
+  int num_dets = ious.size(0);
+  if (num_dets == 0) {
+    return at::empty({0}, ious.options().dtype(at::kLong));
+  }
+
   auto sorted_indices = std::get<1>(scores.sort(true, 0, true));
 
-  int num_dets = ious.size(0);
   const int col_blocks = ceil_div(num_dets, kThreadsPerBlock);
 
   auto mask = at::empty({num_dets * col_blocks}, ious.options().dtype(at::kLong));
@@ -78,7 +84,6 @@ at::Tensor nms_cuda(const at::Tensor& ious, const at::Tensor& scores, double thr
         mask.data_ptr<int64_t>(),
         num_dets,
         ious.data_ptr<scalar_t>(),
-        scores.data_ptr<scalar_t>(),
         sorted_indices.data_ptr<int64_t>(),
         threshold);
   });

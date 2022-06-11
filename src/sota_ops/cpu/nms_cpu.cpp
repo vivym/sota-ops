@@ -37,8 +37,8 @@ at::Tensor nms_cpu(const at::Tensor& ious, const at::Tensor& scores, double thre
 }
 
 TORCH_LIBRARY_IMPL(sota_ops, CPU, m) {
-  m.impl(TORCH_SELECTIVE_NAME("sota_ops::nms"),
-         TORCH_FN(nms_cpu));
+  // m.impl(TORCH_SELECTIVE_NAME("sota_ops::nms"),
+  //        TORCH_FN(nms_cpu));
 }
 
 } // namespace sota_ops::nms
