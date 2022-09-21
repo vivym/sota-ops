@@ -87,7 +87,7 @@ if __name__ == "__main__":
         packages=find_packages(exclude=("tests",)),
         package_data={"sota_ops": ["*.dll", "*.so", "*.dylib"]},
         zip_safe=False,
-        python_requires=">=3.9",
+        python_requires=">=3.8",
         install_requires=[
         ],
     )

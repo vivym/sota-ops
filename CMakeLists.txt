@@ -16,4 +16,12 @@ find_library(TORCH_PYTHON_LIBRARY torch_python REQUIRED PATHS "${TORCH_INSTALL_P
 # cuda
 find_package(CUDAToolkit REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+  MODERNGPU
+  GIT_REPOSITORY https://github.com/moderngpu/moderngpu.git
+  GIT_TAG        d8cf03d33917cb8ee792a59be54c4026913730e4
+)
+FetchContent_MakeAvailable(MODERNGPU)
+
 add_subdirectory(src)

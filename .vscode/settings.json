@@ -79,6 +79,5 @@
         "bit": "cpp",
         "__nullptr": "cpp",
         "__locale": "cpp",
-        "ios": "cpp"
     }
 }

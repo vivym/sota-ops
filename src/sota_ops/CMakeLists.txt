@@ -2,7 +2,7 @@ set(MODULE_NAME sota_ops)
 
 add_library(${MODULE_NAME} SHARED)
 
-file(GLOB_RECURSE HEADER_LIST CONFIGURE_DEPENDS "${SotaOps_SOURCE_DIR}/include/*.h")
+file(GLOB_RECURSE HEADER_LIST CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/include/*.h")
 file(GLOB_RECURSE CPP_SRC CONFIGURE_DEPENDS "*.cpp")
 file(GLOB_RECURSE CUDA_SRC CONFIGURE_DEPENDS "*.cu")
 
@@ -16,13 +16,15 @@ target_sources(${MODULE_NAME}
 
 target_include_directories(${MODULE_NAME} PRIVATE
   ${TORCH_INCLUDE_DIRS}
-  "${SotaOps_SOURCE_DIR}/include"
+  "${PROJECT_SOURCE_DIR}/include"
 )
 
 target_link_libraries(${MODULE_NAME}
   ${TORCH_LIBRARIES}
   ${TORCH_PYTHON_LIBRARY}
   CUDA::cublas
+  CUDA::cusparse
+  MODERNGPU
 )
 
 target_compile_options(${MODULE_NAME} PRIVATE
