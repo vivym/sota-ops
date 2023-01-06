@@ -71,7 +71,7 @@ void ball_query_cuda_impl(
   auto stream = at::cuda::getCurrentCUDAStream().stream();
   auto policy = thrust::cuda::par(utils::ThrustAllocator()).on(stream);
 
-  auto num_queries = points.size(0);
+  auto num_queries = query.size(0);
 
   auto indices_ptr = indices.data_ptr<index_t>();
   auto num_points_per_query_ptr = num_points_per_query.data_ptr<index_t>();
